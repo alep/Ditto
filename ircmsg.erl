@@ -1,7 +1,12 @@
 -module(ircmsg).
 -compile(export_all).
-
+-export([irc_msg/1, irc_parsemsg/1]).
 -include_lib("eunit/include/eunit.hrl").
+
+irc_msg(Args) ->   
+    Xs = lists:foldr(fun(X, Y) -> X ++ " " ++ Y end, "", Args),
+    Ys = string:strip(Xs),
+    Ys ++ "\r\n".
 
 get_args(Str) ->
     Pos = string:str(Str, " :"),

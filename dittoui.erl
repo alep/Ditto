@@ -1,16 +1,14 @@
 -module(dittoui).
 
 -import(conn).
+-import(ircclient).
+-import(ping).
 -import(lists, [concat/1, keysearch/3]).
 
--export([start/0, stop/0, main/0]).
--export([init/1, terminate/2, handle_event/2, handle_call/2, handle_info/2]).
+-export([start/0, main/0]).
 
 -include_lib("wx/include/wx.hrl").
 
--behaviour(gen_event).
-
--define(CONNECT, ?wxID_OPEN).
 -define(EXIT, ?wxID_EXIT).
 
 -define(FRAME, 130).
@@ -21,11 +19,13 @@
 -define(COMMANDS, 134).
 -define(SENDBUTTON, 135).
 
+% custom dialog
+-define(CONNECT, 136).
+-define(MDLOKBTN, 137).
+
+
 start() ->
     spawn(?MODULE, main, []).
-
-stop() ->
-    gen_event:stop(dittoui).
 
 main() ->
     wx:new(),
@@ -95,6 +95,61 @@ setup(Frame) ->
     
     {Cmds, ServerOut}.
 
+
+dialog_callback(EvtRecord, EvtObject) ->
+    io:format("[event object]~p~n", [EvtObject]),
+    case EvtRecord of 
+        #wx{id=?MDLOKBTN, obj=Obj, 
+            event=#wxCommand{type=command_button_clicked}} ->
+            wxDialog:endModal(Obj, ?wxID_OK);
+        #wx{obj=Obj} ->
+            io:format("Other"),
+            wxDialog:endModal(Obj, ?wxID_EXIT)
+    end.
+
+
+connect_dialog(Parent, Id, Title) ->
+    Dialog = wxDialog:new(Parent, Id, Title, [{size, {275, 125}}]),
+
+    Grid = wxGridSizer:new(5, 2, 0, 0), 
+    
+    HostLabel = wxStaticText:new(Dialog, ?wxID_ANY, "Host"),
+    HostTxtInput = wxTextCtrl:new(Dialog, ?wxID_ANY),  
+    
+    PortLabel = wxStaticText:new(Dialog, ?wxID_ANY, "Port"),
+    PortTxtInput = wxTextCtrl:new(Dialog, ?wxID_ANY),
+
+    UserLabel = wxStaticText:new(Dialog, ?wxID_ANY, "Username"),
+    UserTxtInput = wxTextCtrl:new(Dialog, ?wxID_ANY),
+    
+    NickLabel = wxStaticText:new(Dialog, ?wxID_ANY, "Nick"),
+    NickTxtInput = wxTextCtrl:new(Dialog, ?wxID_ANY),  
+
+    OkBtn = wxButton:new(Dialog, ?MDLOKBTN, [{label, "Connect"}]),
+    CloseBtn = wxButton:new(Dialog, ?wxID_ANY, [{label, "Close"}]),
+    
+    BtnOpts = [{proportion, 0}, {flag, (?wxALIGN_CENTER bor 
+                                        ?wxTOP bor ?wxBOTTOM)}],
+    LblOPts = [{proportion, 0}, {flag, ?wxALIGN_CENTER}],
+    TxtOpts = [{proportion, 0}, {flag, ?wxEXPAND}],  
+
+    wxSizer:add(Grid, HostLabel, LblOPts),
+    wxSizer:add(Grid, HostTxtInput, TxtOpts),
+    wxSizer:add(Grid, PortLabel, LblOPts),
+    wxSizer:add(Grid, PortTxtInput, TxtOpts),
+    wxSizer:add(Grid, UserLabel, LblOPts),
+    wxSizer:add(Grid, UserTxtInput, TxtOpts),
+    wxSizer:add(Grid, NickLabel, LblOPts),
+    wxSizer:add(Grid, NickTxtInput, TxtOpts),
+    wxSizer:add(Grid, OkBtn,  BtnOpts),
+    wxSizer:add(Grid, CloseBtn,  BtnOpts),
+    
+    wxDialog:setSizer(Dialog, Grid),
+    wxDialog:connect(Dialog, command_button_clicked,
+                     [{callback, fun dialog_callback/2}]),
+
+    {Dialog, HostTxtInput, PortTxtInput, UserTxtInput, NickTxtInput}.
+
 % loop helpers
 
 parse_and_notify_cmds(String) ->
@@ -137,26 +192,9 @@ aux_send_cmd(TextCtrlLog, TextCtrlCmd, String) ->
 
 aux_gen_event_start(SocketPid) ->
     gen_event:start({local, ditto}),
-    gen_event:add_handler(ditto, conn, SocketPid),
+    gen_event:add_handler(ditto, ircclient, [{conn, SocketPid}, {ui, self()}]),
     gen_event:add_handler(ditto, ping, SocketPid),
-    gen_event:add_handler(ditto, ?MODULE, [SocketPid, self()]),   % self() is the "UI Pid"
     ok.
-
-aux_parse_modaldialog_string(Dialog, TextCtrlLog) ->
-    case wxTextEntryDialog:showModal(Dialog) of
-        ?wxID_OK ->
-            Str = wxTextEntryDialog:getValue(Dialog),
-            wxTextCtrl:writeText(TextCtrlLog, ("Connecting to " ++ Str ++ "\n")),
-            io:format("[DEBUG] Server: ~p~n", [Str]),
-            %% [Host|[Port|_Xs]] = string:tokens(Str, ":"),
-            %% PortNo = list_to_integer(Port),
-            Host = "chat.freenode.net",
-            PortNo = 6667,
-            {Host, PortNo};
-        _ -> 
-            error
-    end.
-
 
 loop(Frame, Text, Log, Connected) ->
     receive
@@ -175,41 +213,53 @@ loop(Frame, Text, Log, Connected) ->
                 true ->
                     NextConnected = true;
                 false ->
-                    Prompt = "Connect to server:",
-                    MD = wxTextEntryDialog:new(Frame, Prompt, [{caption, "Connect to..."}]),                   
-                    ConnData = aux_parse_modaldialog_string(MD, Log),
-                    case ConnData of
-                        {Host, PortNo} ->
-                            SockPid = conn:conn(Host, PortNo),
+                    {Dialog, HostTxt, PortTxt, UserTxt, NickTxt} = 
+                        connect_dialog(Frame, ?wxID_ANY, "Connect"),
+                    case wxDialog:showModal(Dialog) of 
+                        ?wxID_OK  ->
+                            HostVal = wxTextCtrl:getValue(HostTxt),
+                            PortVal = wxTextCtrl:getValue(PortTxt),
+                            UserVal = wxTextCtrl:getValue(UserTxt),
+                            NickVal = wxTextCtrl:getValue(NickTxt),
+                            io:format("Connection to ~p:~p with nick: ~p~n", 
+                                      [HostVal, PortVal, NickVal]),
+                            SockPid = conn:open(HostVal, 
+                                                list_to_integer(PortVal),
+                                               fun (X) ->
+                                                       gen_event:notify(ditto, X)
+                                               end),
                             case SockPid of
                                 error ->
                                     NextConnected = false,
                                     error;
                                 _ ->
                                     aux_gen_event_start(SockPid),
-                                    timer:sleep(1000),
                                     io:format("*** Registering ***~n"),
-                                    gen_event:notify(ditto, {pass, "chumbawamba"}),
-                                    gen_event:notify(ditto, {nick, "aleperaltabot"}),
-                                    gen_event:notify(ditto, {user, "aleperaltabot", 
-                                                             "Ale Peralta's Client"}),
+                                    {ok, Hostname} = inet:gethostname(),
+                                    gen_event:notify(ditto, 
+                                                     {pass, "ErlangBabe"}),
+                                    gen_event:notify(ditto, {nick, NickVal}),
+                                    gen_event:notify(ditto,{user, UserVal, 
+                                                            Hostname, HostVal,
+                                                            "Anonymous Coward"}),
                                     NextConnected = true
-                            end;
-                        error ->
-                            NextConnected = false,
-                            error
-                    end,                 
-                    wxDialog:destroy(MD)
+                            end;                
+                        
+                        Id -> 
+                            io:format("Nothing: [~p] ~n", [Id]),
+                            NextConnected = false
+                    end,
+                    wxDialog:destroy(Dialog)
             end,
             loop(Frame, Text, Log, NextConnected);
 
 
         #wx{id=?EXIT, event=#wxCommand{type=command_menu_selected}} ->
-            gen_event:stop(dittoui),
+            gen_event:stop(ditto),
             io:format("Bye.");
 
         #wx{id=?FRAME, event=#wxClose{type=close_window}} ->
-            gen_event:stop(dittoui),
+            gen_event:stop(ditto),
             io:format("Bye.");
         
         {server, Line} ->
@@ -220,62 +270,4 @@ loop(Frame, Text, Log, Connected) ->
             io:format("[DEBUG] Lost message: ~p~n", [Msg]),
             loop(Frame, Text, Log, Connected)
     end.
-
-
-% helpers to callbacks to the gen_event behaviour
-
-get_elem_or_error(Key, List) ->
-    case keysearch(Key, 1, List) of
-        {value, {Key, Pid}} ->
-            Pid;
-        _ ->
-            exit("Error missing elem")
-    end.
-
-
-get_conn(State) ->
-    Key = conn,
-    get_elem_or_error(Key, State).
-
-    
-get_ui(State) ->
-    Key = ui,
-    get_elem_or_error(Key, State).
-
-
-% callbacks to the gen_event behaviour
-
-
-init(Args) ->
-    [ConnPid|[DittoUIPid|_Xs]] = Args,
-    {ok, [{conn, ConnPid}, {ui, DittoUIPid}]}.
-
-
-handle_event({recv, Data}, State) -> 
-    S0 = binary_to_list(Data),
-    S1 = string:strip(S0, both, $\n),
-    Line = string:strip(S1, both, $\r),
-    Pid = get_ui(State),
-    Pid ! {server, Line},
-    {ok, State};
-handle_event(_Ignore, State) ->
-    {ok, State}.
-
-
-handle_call(_Request, State) ->
-    io:format("~p~n", [State]),
-    {ok, State, State}.
-
-
-handle_info(_Info, State) ->
-    io:format("~p, my pid: ~n", [State]),
-    {ok, State}.
-
-
-terminate({stop, Reason}, _State) ->
-    io:format("Stoping: ~p~n", [Reason]),
-    ok;
-terminate(stop, _State) ->
-    io:format("Stoping.. ~n"),
-    ok.
 
