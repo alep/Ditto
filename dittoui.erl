@@ -193,7 +193,6 @@ aux_send_cmd(TextCtrlLog, TextCtrlCmd, String) ->
 aux_gen_event_start(SocketPid) ->
     gen_event:start({local, ditto}),
     gen_event:add_handler(ditto, ircclient, [{conn, SocketPid}, {ui, self()}]),
-    gen_event:add_handler(ditto, ping, SocketPid),
     ok.
 
 loop(Frame, Text, Log, Connected) ->
@@ -262,7 +261,9 @@ loop(Frame, Text, Log, Connected) ->
             gen_event:stop(ditto),
             io:format("Bye.");
         
-        {server, Line} ->
+        {server, {_Prefix, Command, Args}} ->
+            Line = Command ++ " "
+                ++ lists:foldr(fun(X, Y) -> X ++ " " ++ Y end, "", Args),
             wxTextCtrl:writeText(Log, Line ++ "\n"),
             loop(Frame, Text, Log, Connected);
         

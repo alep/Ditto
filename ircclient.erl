@@ -1,15 +1,17 @@
 -module(ircclient).
 -import(lists, [concat/1, keysearch/3]).
--import(ircmsg, [irc_msg/1, irc_parsemsg/1]).
+-import(ircmsg, [irc_msg/1, irc_parsemsg/1, get_command_from_num/1]).
 -export([init/1, terminate/2, handle_event/2, handle_call/2, handle_info/2, code_change/3]). 
+-export([handle_RPL_MOTD/3, handle_RPL_ENDOFMOTD/3, handle_RPL_MOTDSTART/3,
+        handle_PING/3]).
 -behaviour(gen_event).
 
 % helpers to callbacks to the gen_event behaviour
 
 get_elem_or_error(Key, List) ->
     case keysearch(Key, 1, List) of
-        {value, {Key, Pid}} ->
-            Pid;
+        {value, {Key, Value}} ->
+            Value;
         _ ->
             io:format("Error, key: ~p not fount~n", [Key]),
             error
@@ -39,23 +41,52 @@ close_conn(Vars) ->
 
 % callbacks to the gen_event behaviour
 
+clean_line(Data) ->
+    S0 = binary_to_list(Data),
+    S1 = string:strip(S0, both, $\n),
+    string:strip(S1, both, $\r).
+
 init(Args) ->
     %% Args = [{conn, ConnPid}, {ui, DittoUIPid}]
     {ok, {disconnected, Args}}.
 
 handle_event({recv, Data}, {_, Vars}=State) -> 
-    S0 = binary_to_list(Data),
-    S1 = string:strip(S0, both, $\n),
-    Line = string:strip(S1, both, $\r),
+    Line = clean_line(Data),
+    case irc_parsemsg(Line) of
+        {ok, ParsedLine} ->
+            UIPid = get_ui(Vars),
+            if not (UIPid =:= error) ->
+                    UIPid ! {server, ParsedLine}
+            end,
+            R = handle_msg(ParsedLine, State);
+        {error, _} ->
+            R = State
+    end,  
+    {ok, R};
 
-    UIPid = get_ui(Vars),
-    if not (UIPid =:= error) ->
-            UIPid ! {server, Line}
-    end,
-    {ok, State};
+%% handle_event({recv, Data}, {motdstart, Vars}=State) ->
+%%     Line = clean_line(Data),
+%%     case irc_parsemsg(Line) of
+%%         {ok, ParsedLine} ->
+%%             handle_msg(ParsedLine, State);
+%%         {error, _} ->
+%%             ok
+%%     end,
+%%     {ok, State};
+
+%% handle_event({recv, Data}, {motd, Vars}=State) ->
+    
+%%     {ok, State};
+
+%% handle_event({recv, Data}, {endofmotd, Vars}=State} ->
+    
+%%     {ok, {connected, Vars}};
+
+
 handle_event({send, Line}, {_, Vars}=State) ->
     send_msg(Vars, Line ++ "\r\n"),
     {ok, State};
+
 handle_event({pass, Password}, {disconnected, Vars}) ->
     send_msg(Vars, irc_msg(["PASS", Password])),   
     {ok, {nick, Vars}};
@@ -104,3 +135,54 @@ terminate(stop, {_, Vars}) ->
 
 code_change(_, _, _) ->
     ok.
+
+handle_msg({Prefix, Command, Args}, State) ->
+    CommandName = get_command_from_num(Command),
+
+    Name = list_to_atom("handle_" ++ CommandName),
+    Result = (catch apply(?MODULE, Name, [Prefix, Args, State])),
+
+    case Result of
+        {'EXIT', {undef, _}} ->
+            handle_unknown_command(Prefix, CommandName, Args),
+            State;
+        _ ->
+            io:format("Result: ~p~n", [Result]),
+            Result
+    end.
+
+handle_PING(_Prefix, Args, {St, Vars}) ->
+    send_msg(Vars, irc_msg(["PONG"] ++ Args)),
+    {St, Vars}.
+
+handle_RPL_MOTDSTART(_Prefix, _Args, {St, Vars}) ->
+    NewVars = [{motd, []} | Vars],
+    {St, NewVars}.
+
+handle_RPL_MOTD(_Prefix, Args, {St, Vars}=State) ->
+    MOTD = get_elem_or_error(motd, Vars),
+    case (MOTD =:= error) of
+        true ->
+            State;
+        false ->
+            NewMOTD = [Args|MOTD],
+            V = lists:keydelete(motd, 1, Vars),
+            NewVars = [{motd, NewMOTD}|V],
+            {St, NewVars}
+    end.
+
+handle_RPL_ENDOFMOTD(_Prefix, _Args, {St, Vars}=State) ->
+    MOTD = get_elem_or_error(motd, Vars),
+    case (MOTD =:= error) of
+        true ->
+            State;
+        false ->
+            NewMOTD = lists:reverse(MOTD),
+            V = lists:keydelete(motd, 1, Vars),
+            NewVars = [{motd, NewMOTD}|V],
+            {St, NewVars}
+    end.
+
+handle_unknown_command(_Prefix, Command, _Args) ->
+    io:format("Unknown command: ~p~n", [Command]),
+    error.
