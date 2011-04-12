@@ -14,6 +14,8 @@ The idea of hiding the IRC protocol behing a gen_event behaviour remains. Althou
 The following (ascii)-diagram shows, what's yet to be implemented, how would I hide using gen_event an error msg from the server when trying to subscribe a nick.
 
 ::
+
+
   +----------+                +----------+        gen_event:         +----------+
   |          |   NICK anick   |          |  notify({nick, "anick"})  | wxErlang |
   |IRC Server|  <-----------  |gen_event |  <----------------------  |   GUI    |
@@ -42,6 +44,7 @@ The following (ascii)-diagram shows, what's yet to be implemented, how would I h
   |IRC Server|                   |gen_event |   --------------------->  |   GUI    |
   |          |                   |          |                           |          |
   +----------+                   +----------+                           +----------+
+
                                     
 I think it is wasteful because I don't think I need gen_event to hide all this, I could
 just use the process that controls the socket which talks to gen_event. It might make
