@@ -53,3 +53,28 @@ things simpler.
 Anyway I'm looking for comments on the idea and the code.
 
 Thanks.
+
+
+How to use
+----------
+
+:: 
+
+  $ erl
+  Erlang R13B04 (erts-5.7.5) [source] [smp:2:2] [rq:2] [async-threads:0] [hipe] [kernel-poll:false]
+
+  Eshell V5.7.5  (abort with ^G)
+  1> c(conn). 
+  {ok,conn}
+  2> c(ircmsg).
+  {ok,ircmsg}
+  3> c(ircclient).
+  {ok,ircclient}
+  4> c(dittoui).
+  {ok,dittoui}
+  5> dittoui:start().
+  <0.61.0>
+ 
+Next File -> Connect, with "chat.freenode.net", 6667, <somenick>, <someusername>
+
+Thanks, again.
