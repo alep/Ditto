@@ -3,7 +3,7 @@
 -import(ircmsg, [irc_msg/1, irc_parsemsg/1, get_command_from_num/1]).
 -export([init/1, terminate/2, handle_event/2, handle_call/2, handle_info/2, code_change/3]). 
 -export([handle_RPL_MOTD/3, handle_RPL_ENDOFMOTD/3, handle_RPL_MOTDSTART/3,
-        handle_PING/3]).
+        handle_PING/3, handle_JOIN/3]).
 -behaviour(gen_event).
 
 % helpers to callbacks to the gen_event behaviour
@@ -47,7 +47,6 @@ clean_line(Data) ->
     string:strip(S1, both, $\r).
 
 init(Args) ->
-    %% Args = [{conn, ConnPid}, {ui, DittoUIPid}]
     {ok, {disconnected, Args}}.
 
 handle_event({recv, Data}, {_, Vars}=State) -> 
@@ -63,25 +62,6 @@ handle_event({recv, Data}, {_, Vars}=State) ->
             R = State
     end,  
     {ok, R};
-
-%% handle_event({recv, Data}, {motdstart, Vars}=State) ->
-%%     Line = clean_line(Data),
-%%     case irc_parsemsg(Line) of
-%%         {ok, ParsedLine} ->
-%%             handle_msg(ParsedLine, State);
-%%         {error, _} ->
-%%             ok
-%%     end,
-%%     {ok, State};
-
-%% handle_event({recv, Data}, {motd, Vars}=State) ->
-    
-%%     {ok, State};
-
-%% handle_event({recv, Data}, {endofmotd, Vars}=State} ->
-    
-%%     {ok, {connected, Vars}};
-
 
 handle_event({send, Line}, {_, Vars}=State) ->
     send_msg(Vars, Line ++ "\r\n"),
@@ -136,6 +116,8 @@ terminate(stop, {_, Vars}) ->
 code_change(_, _, _) ->
     ok.
 
+% IRC msg handling. Also see ircmsg.
+
 handle_msg({Prefix, Command, Args}, State) ->
     CommandName = get_command_from_num(Command),
 
@@ -155,11 +137,28 @@ handle_PING(_Prefix, Args, {St, Vars}) ->
     send_msg(Vars, irc_msg(["PONG"] ++ Args)),
     {St, Vars}.
 
+handle_JOIN(_Prefix, Args, {St, Vars}) ->
+    % here for example we should check what the arguments
+    % are. If it's JOIN 0 (Args =:= ["0"]), we should
+    % clean the list of channels joined.
+    JoinList = get_elem_or_error(join, Vars),
+    {L, V} = case (JoinList =:= error) of
+                 true ->
+                     {[], Vars};
+                 false ->
+                     JoinList,
+                     Vars0 = lists:keydelete(join, 1, Vars),
+                     {JoinList, Vars0}
+        end,
+    NewVars = [{join, [Args|L]}|V],
+    {St, NewVars}.  
+
 handle_RPL_MOTDSTART(_Prefix, _Args, {St, Vars}) ->
     NewVars = [{motd, []} | Vars],
     {St, NewVars}.
 
 handle_RPL_MOTD(_Prefix, Args, {St, Vars}=State) ->
+    % we should remove the head of Args, as it is the nick
     MOTD = get_elem_or_error(motd, Vars),
     case (MOTD =:= error) of
         true ->
