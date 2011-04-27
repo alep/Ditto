@@ -1,4 +1,4 @@
--module(conn).
+-module(ditto_ircconn).
 -import(lists, [concat/1, keysearch/3]).
 -export([open/3]).
 

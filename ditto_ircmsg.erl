@@ -1,4 +1,4 @@
--module(ircmsg).
+-module(ditto_ircmsg).
 -compile(export_all).
 -export([irc_msg/1, irc_parsemsg/1, get_command_from_num/1]).
 -include_lib("eunit/include/eunit.hrl").

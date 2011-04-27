@@ -1,6 +1,6 @@
--module(ircclient).
+-module(ditto_ircclient).
 -import(lists, [concat/1, keysearch/3]).
--import(ircmsg, [irc_msg/1, irc_parsemsg/1, get_command_from_num/1]).
+-import(ditto_ircmsg, [irc_msg/1, irc_parsemsg/1, get_command_from_num/1]).
 -export([init/1, terminate/2, handle_event/2, handle_call/2, handle_info/2, code_change/3]). 
 -export([handle_RPL_MOTD/3, handle_RPL_ENDOFMOTD/3, handle_RPL_MOTDSTART/3,
         handle_PING/3, handle_JOIN/3]).

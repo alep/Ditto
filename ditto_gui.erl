@@ -1,7 +1,7 @@
--module(dittoui).
+-module(ditto_gui).
 
--import(conn).
--import(ircclient).
+-import(ditto_ircconn).
+-import(ditto_ircclient).
 -import(ping).
 -import(lists, [concat/1, keysearch/3]).
 
@@ -192,7 +192,8 @@ aux_send_cmd(TextCtrlLog, TextCtrlCmd, String) ->
 
 aux_gen_event_start(SocketPid) ->
     gen_event:start({local, ditto}),
-    gen_event:add_handler(ditto, ircclient, [{conn, SocketPid}, {ui, self()}]),
+    gen_event:add_handler(ditto, ditto_ircclient, [{conn, SocketPid}, 
+                                                   {ui, self()}]),
     ok.
 
 loop(Frame, Text, Log, Connected) ->
@@ -222,11 +223,11 @@ loop(Frame, Text, Log, Connected) ->
                             NickVal = wxTextCtrl:getValue(NickTxt),
                             io:format("Connection to ~p:~p with nick: ~p~n", 
                                       [HostVal, PortVal, NickVal]),
-                            SockPid = conn:open(HostVal, 
-                                                list_to_integer(PortVal),
-                                               fun (X) ->
-                                                       gen_event:notify(ditto, X)
-                                               end),
+                            SockPid = ditto_ircconn:open(HostVal, 
+                                                         list_to_integer(PortVal),
+                                                         fun (X) ->
+                                                                 gen_event:notify(ditto, X)
+                                                         end),
                             case SockPid of
                                 error ->
                                     NextConnected = false,
