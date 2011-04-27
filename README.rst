@@ -25,25 +25,26 @@ The following (ascii)-diagram shows, what's yet to be implemented, how would I h
                                     |  
                                     | State = "sent nick"
                                     |
-                                   \/
+                                   \ /
+                                    '
 
   +----------+                   +----------+                       +----------+
   |          | ERR_NICKNAMEINUSE |          |                       | wxErlang |
-  |IRC Server|   --------------> |gen_event |                       |   GUI    |
+  |IRC Server| ----------------> |gen_event |                       |   GUI    |
   |          |                   |          |                       |          |
   +----------+                   +----------+                       +----------+
                                     
                                     |
                                     | State = "sent pass" 
                                     | (or whatever before nick)
-                                    \/
-
-                                               (need some sort of 
-  +----------+                   +----------+   callback into the GUI)  +----------+
-  |          |                   |          |   UIPid ! { badnick }     | wxErlang |
-  |IRC Server|                   |gen_event |   --------------------->  |   GUI    |
-  |          |                   |          |                           |          |
-  +----------+                   +----------+                           +----------+
+                                   \ /
+                                    '
+                                             (need some sort of 
+  +----------+                 +----------+   callback into the GUI)  +----------+
+  |          |                 |          |   UIPid ! { badnick }     | wxErlang |
+  |IRC Server|                 |gen_event |   --------------------->  |   GUI    |
+  |          |                 |          |                           |          |
+  +----------+                 +----------+                           +----------+
 
                                     
 I think it is wasteful because I don't think I need gen_event to hide all this, I could
@@ -75,6 +76,7 @@ How to use
   5> dittoui:start().
   <0.61.0>
  
-Next File -> Connect, with "chat.freenode.net", 6667, <somenick>, <someusername>
+Next File -> Connect, 
+    with "chat.freenode.net", 6667, <somenick>, <someusername>
 
 Thanks, again.
