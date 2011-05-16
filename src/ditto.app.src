@@ -1,0 +1,12 @@
+{application, ditto,
+ [
+  {description, "Ditto, an IRC Client"},
+  {vsn, "0.1"}, 
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib      
+                 ]},
+  {mod, { ditto_app, []}},
+  {env, []}
+ ]}.

@@ -5,7 +5,7 @@
 -import(ping).
 -import(lists, [concat/1, keysearch/3]).
 
--export([start/0, main/0]).
+-export([start/0, stop/0, main/0]).
 
 -include_lib("wx/include/wx.hrl").
 
@@ -25,7 +25,14 @@
 
 
 start() ->
-    spawn(?MODULE, main, []).
+    Pid = spawn(?MODULE, main, []),
+    io:format("Hello. ~n"),
+    {ok, Pid}.
+
+stop() ->
+    gen_event:stop(ditto),
+    io:format("Bye. ~n"),
+    ok.
 
 main() ->
     wx:new(),
